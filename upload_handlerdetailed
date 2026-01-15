@@ -1,0 +1,109 @@
+<?php
+// 1. Session start karo taaki user login info (jaise user_id, username) available rahe
+session_start();
+
+// 2. Database connection (apna connection code yahan daal do – yeh example MySQLi use kar raha hai)
+$conn = new mysqli("localhost", "root", "", "your_database_name");  // ← yahan database name change karna
+
+// Connection check – agar connect nahi hua to error dikhao aur ruk jao
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// 3. Check karo ki form submit hua hai aur file bhi select ki gayi hai
+if (isset($_POST['upload']) && isset($_FILES['document'])) {
+
+    // $_FILES['document'] se uploaded file ki saari info milti hai
+    $file = $_FILES['document'];
+
+    // 4. Upload mein koi error to nahi aaya? (jaise file badi thi, permission issue, etc.)
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        die("Upload error code: " . $file['error']);
+        // Common error codes: 1 = file too big, 4 = no file selected, etc.
+    }
+
+    // 5. File ka extension check karo (security ke liye – sirf allowed types hi accept karo)
+    $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'zip', 'txt'];
+    $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+    if (!in_array($file_extension, $allowed_extensions)) {
+        die("Yeh file type allowed nahi hai. Sirf " . implode(", ", $allowed_extensions) . " allowed hain.");
+    }
+
+    // 6. Uploads folder banao agar exist nahi karta
+    $upload_folder = "uploads/";
+    if (!is_dir($upload_folder)) {
+        // 0755 permission – folder banane ke liye common setting
+        mkdir($upload_folder, 0755, true);
+    }
+
+    // 7. File ka naya unique naam banao taaki overwrite na ho
+    // time() + uniqid() se har file ka naam alag rahega
+    $new_filename = time() . "_" . uniqid() . "." . $file_extension;
+
+    // Final path jahan file save hogi
+    $destination_path = $upload_folder . $new_filename;
+
+    // 8. Temporary location se permanent location pe file move karo
+    if (move_uploaded_file($file['tmp_name'], $destination_path)) {
+
+        // File successfully move ho gayi – ab database mein record save karte hain
+
+        // Current user ki info (agar login system hai to session se aayegi)
+        $user_id    = $_SESSION['user_id']   ?? 0;       // agar login nahi hai to 0
+        $username   = $_SESSION['username']  ?? 'guest'; // default guest
+
+        // Original file name jo user ne diya tha
+        $original_name = $file['name'];
+
+        // File ka size bytes mein
+        $file_size = $file['size'];
+
+        // Current time automatically database mein jayega (DEFAULT CURRENT_TIMESTAMP use kiya tha table mein)
+        // IP address bhi save kar sakte ho (tracking ke liye)
+        $user_ip = $_SERVER['REMOTE_ADDR'];
+
+        // 9. Prepared statement use kar rahe hain taaki SQL injection se bacha ja sake
+        $stmt = $conn->prepare("
+            INSERT INTO file_uploads 
+            (user_id, username, file_name, saved_as, file_size, upload_time, ip_address) 
+            VALUES (?, ?, ?, ?, ?, NOW(), ?)
+        ");
+
+        // Bind parameters (s = string, i = integer)
+        $stmt->bind_param("isssis", 
+            $user_id, 
+            $username, 
+            $original_name, 
+            $new_filename, 
+            $file_size, 
+            $user_ip
+        );
+
+        // Query execute karo
+        if ($stmt->execute()) {
+            echo "<h3>File successfully upload ho gayi!</h3>";
+            echo "<p>Original name: <b>" . htmlspecialchars($original_name) . "</b></p>";
+            echo "<p>Saved as (server name): <b>" . htmlspecialchars($new_filename) . "</b></p>";
+            echo "<p>Size: <b>" . number_format($file_size / 1024, 2) . " KB</b></p>";
+            echo "<p>Uploaded by: <b>" . htmlspecialchars($username) . "</b> (ID: $user_id)</p>";
+            echo "<p>Time: <b>" . date('d-m-Y h:i A') . "</b></p>";
+            echo "<p>IP: <b>$user_ip</b></p>";
+        } else {
+            echo "Database mein save nahi ho paya: " . $stmt->error;
+        }
+
+        // Statement close kar do
+        $stmt->close();
+
+    } else {
+        echo "File move nahi ho payi. uploads/ folder ke permissions check karo (755 ya 777 try kar sakte ho test ke liye).";
+    }
+
+} else {
+    echo "Koi file select nahi ki gayi ya form galat tareeke se submit hua.";
+}
+
+// 10. Connection band kar do (good practice)
+$conn->close();
+?>
