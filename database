@@ -1,0 +1,10 @@
+CREATE TABLE file_uploads (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL,               -- ya username VARCHAR(100)
+    username    VARCHAR(100) NOT NULL,       -- optional
+    file_name   VARCHAR(255) NOT NULL,       -- original name
+    saved_as    VARCHAR(255) NOT NULL,       -- server pe kya naam se save hua
+    file_size   INT NOT NULL,                -- bytes mein
+    upload_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ip_address  VARCHAR(45)                  -- optional
+);
